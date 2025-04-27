@@ -23,6 +23,13 @@ class JetEmail_WP_Updater {
         add_filter('pre_set_site_transient_update_plugins', array($this, 'check_update'));
         add_filter('plugins_api', array($this, 'plugin_info'), 10, 3);
         add_action('upgrader_process_complete', array($this, 'purge_cache'), 10, 2);
+
+        // Add auto-update support
+        add_filter('auto_update_plugin', array($this, 'auto_update_plugin'), 10, 2);
+        add_filter('plugin_auto_update_setting_html', array($this, 'auto_update_setting_html'), 10, 2);
+        
+        // Add auto-update settings
+        add_action('admin_init', array($this, 'register_auto_update_setting'));
     }
 
     public function check_update($transient) {
@@ -219,6 +226,78 @@ class JetEmail_WP_Updater {
                     '_transient_' . $this->cache_key . '%'
                 )
             );
+        }
+    }
+
+    /**
+     * Register the auto-update setting
+     */
+    public function register_auto_update_setting() {
+        register_setting(
+            'jetemail_wp_settings',
+            'jetemail_wp_auto_update',
+            array(
+                'type' => 'boolean',
+                'default' => true,
+                'sanitize_callback' => 'rest_sanitize_boolean'
+            )
+        );
+
+        add_settings_field(
+            'jetemail_wp_auto_update',
+            __('Auto Updates', 'jetemail-wordpress'),
+            array($this, 'auto_update_field_callback'),
+            'jetemail-settings',
+            'jetemail_wp_settings_section'
+        );
+    }
+
+    /**
+     * Render the auto-update setting field
+     */
+    public function auto_update_field_callback() {
+        $auto_update = get_option('jetemail_wp_auto_update', true);
+        ?>
+        <label>
+            <input type="checkbox" name="jetemail_wp_auto_update" value="1" <?php checked($auto_update); ?>>
+            <?php _e('Enable automatic updates for JetEmail', 'jetemail-wordpress'); ?>
+        </label>
+        <p class="description">
+            <?php _e('When enabled, JetEmail will automatically update to the latest version when available.', 'jetemail-wordpress'); ?>
+        </p>
+        <?php
+    }
+
+    /**
+     * Determine if the plugin should be automatically updated
+     */
+    public function auto_update_plugin($update, $item) {
+        if (!isset($item->slug)) {
+            return $update;
+        }
+
+        // Check if this is our plugin
+        if ($item->slug === $this->plugin_slug) {
+            // Get the auto-update setting (defaults to true)
+            return get_option('jetemail_wp_auto_update', true);
+        }
+
+        return $update;
+    }
+
+    /**
+     * Customize the auto-update column text
+     */
+    public function auto_update_setting_html($html, $plugin_file) {
+        if ($plugin_file !== plugin_basename($this->plugin_file)) {
+            return $html;
+        }
+
+        $auto_update = get_option('jetemail_wp_auto_update', true);
+        if ($auto_update) {
+            return __('Auto-updates enabled', 'jetemail-wordpress');
+        } else {
+            return __('Auto-updates disabled', 'jetemail-wordpress');
         }
     }
 } 

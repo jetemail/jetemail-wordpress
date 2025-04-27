@@ -57,7 +57,11 @@ class JetEmail_WP {
     }
 
     public function settings_section_callback() {
-        echo '<p>' . __('Enter your JetEmail API credentials below:', 'jetemail-wordpress') . '</p>';
+        echo '<p>' . __('Configure your JetEmail settings below:', 'jetemail-wordpress') . '</p>';
+        
+        // Add a note about auto-updates
+        echo '<p><strong>' . __('Auto-Updates:', 'jetemail-wordpress') . '</strong> ';
+        echo __('You can control automatic updates for JetEmail below. We recommend keeping auto-updates enabled to ensure you have the latest features and security updates.', 'jetemail-wordpress') . '</p>';
     }
 
     public function api_key_field_callback() {
