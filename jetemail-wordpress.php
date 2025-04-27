@@ -33,11 +33,9 @@ add_action('plugins_loaded', 'jetemail_wp_init');
 // Activation hook
 register_activation_hook(__FILE__, 'jetemail_wp_activate');
 function jetemail_wp_activate() {
-    // Add any activation tasks here
 }
 
 // Deactivation hook
 register_deactivation_hook(__FILE__, 'jetemail_wp_deactivate');
 function jetemail_wp_deactivate() {
-    // Add any cleanup tasks here
 } 
