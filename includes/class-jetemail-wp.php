@@ -81,12 +81,17 @@ class JetEmail_WP {
     }
 
     public function override_wordpress_mail($phpmailer) {
+        // Clear recipients immediately to prevent WordPress from sending
+        $to = $phpmailer->getToAddresses();
+        $phpmailer->clearAllRecipients();
+        $phpmailer->clearAttachments();
+
         if (empty($this->api_key)) {
-            return;
+            error_log('JetEmail API Error: No API key configured');
+            return false;
         }
 
         // Get email data from PHPMailer object
-        $to = $phpmailer->getToAddresses();
         $from = $phpmailer->From;
         $from_name = $phpmailer->FromName;
         $subject = $phpmailer->Subject;
@@ -136,8 +141,6 @@ class JetEmail_WP {
             return false;
         }
 
-        // Prevent WordPress from sending the email since we've handled it
-        $phpmailer->clearAllRecipients();
-        $phpmailer->clearAttachments();
+        return true;
     }
 } 

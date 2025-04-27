@@ -19,14 +19,21 @@ if (!defined('ABSPATH')) {
 define('JETEMAIL_WP_VERSION', '1.0.0');
 define('JETEMAIL_WP_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('JETEMAIL_WP_PLUGIN_URL', plugin_dir_url(__FILE__));
+define('JETEMAIL_WP_PLUGIN_FILE', __FILE__);
 
 // Include required files
 require_once JETEMAIL_WP_PLUGIN_DIR . 'includes/class-jetemail-wp.php';
+require_once JETEMAIL_WP_PLUGIN_DIR . 'includes/class-jetemail-wp-updater.php';
 
 // Initialize the plugin
 function jetemail_wp_init() {
     $plugin = new JetEmail_WP();
     $plugin->init();
+
+    // Initialize the updater
+    if (is_admin()) {
+        new JetEmail_WP_Updater(JETEMAIL_WP_PLUGIN_FILE);
+    }
 }
 add_action('plugins_loaded', 'jetemail_wp_init');
 
