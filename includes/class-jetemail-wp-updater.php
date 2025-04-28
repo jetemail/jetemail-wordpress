@@ -75,7 +75,11 @@ class JetEmail_WP_Updater {
                 $obj->plugin = $this->plugin_basename;
                 $obj->new_version = $remote_version;
                 $obj->url = $release_info->html_url;
-                $obj->package = $release_info->zipball_url;
+                
+                // Use the release asset URL instead of zipball_url
+                $download_url = $this->get_release_download_url($release_info);
+                $obj->package = $download_url;
+                
                 $obj->tested = $this->get_tested_wp_version();
                 $obj->requires = '5.0';
                 $obj->requires_php = '7.2';
@@ -105,6 +109,21 @@ class JetEmail_WP_Updater {
         return $transient;
     }
 
+    private function get_release_download_url($release_info) {
+        // First try to get the asset that ends with .zip
+        if (!empty($release_info->assets)) {
+            foreach ($release_info->assets as $asset) {
+                if (substr($asset->name, -4) === '.zip') {
+                    return $asset->browser_download_url;
+                }
+            }
+        }
+        
+        // If no .zip asset found, construct the download URL
+        $tag = $release_info->tag_name;
+        return "https://github.com/jetemail/jetemail-wordpress/archive/refs/tags/{$tag}.zip";
+    }
+
     public function plugin_info($res, $action, $args) {
         // Do nothing if this is not about our plugin
         if ('plugin_information' !== $action || $this->plugin_slug !== $args->slug) {
@@ -117,6 +136,7 @@ class JetEmail_WP_Updater {
         }
 
         $readme = $this->get_readme_info();
+        $release_info = $this->get_latest_release();
 
         $res = new stdClass();
         $res->name = 'JetEmail for WordPress';
@@ -127,9 +147,9 @@ class JetEmail_WP_Updater {
         $res->requires_php = '7.2';
         $res->author = '<a href="https://jetemail.com">JetEmail</a>';
         $res->author_profile = 'https://github.com/jetemail';
-        $res->download_link = $remote_info->zipball_url;
-        $res->trunk = $remote_info->zipball_url;
-        $res->last_updated = isset($remote_info->published_at) ? date('Y-m-d H:i:s', strtotime($remote_info->published_at)) : '';
+        $res->download_link = $this->get_release_download_url($release_info);
+        $res->trunk = $this->get_release_download_url($release_info);
+        $res->last_updated = isset($release_info->published_at) ? date('Y-m-d H:i:s', strtotime($release_info->published_at)) : '';
         
         // Parse readme sections if available
         if ($readme) {
@@ -377,14 +397,17 @@ class JetEmail_WP_Updater {
         global $wp_filesystem;
         
         // Get the expected plugin directory name
-        $plugin_dir = dirname($this->plugin_basename);
+        $plugin_dir = 'jetemail-wordpress';
         $proper_destination = WP_PLUGIN_DIR . '/' . $plugin_dir;
         
         // Check if the plugin directory exists
         if (!$wp_filesystem->exists($proper_destination)) {
             // Find the extracted directory (it might have a different name)
             $extracted_dir = '';
-            foreach (glob(WP_PLUGIN_DIR . '/jetemail*') as $dir) {
+            
+            // Look for any directory that starts with jetemail-wordpress
+            $dirs = glob(WP_PLUGIN_DIR . '/jetemail-wordpress*');
+            foreach ($dirs as $dir) {
                 if ($dir !== $proper_destination && is_dir($dir)) {
                     $extracted_dir = $dir;
                     break;
@@ -393,8 +416,16 @@ class JetEmail_WP_Updater {
             
             // If we found the extracted directory and it's different from what we want
             if (!empty($extracted_dir) && $extracted_dir !== $proper_destination) {
-                // Move it to the correct location
+                // If the proper destination already exists, remove it
+                if ($wp_filesystem->exists($proper_destination)) {
+                    $wp_filesystem->delete($proper_destination, true);
+                }
+                
+                // Move the extracted directory to the correct location
                 $wp_filesystem->move($extracted_dir, $proper_destination);
+                
+                // Log the directory change
+                error_log('JetEmail: Moved plugin directory from ' . $extracted_dir . ' to ' . $proper_destination);
             }
         }
         
