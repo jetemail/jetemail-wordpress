@@ -13,6 +13,7 @@ class JetEmail_WP_Updater {
     private $version;
     private $cache_key;
     private $cache_allowed;
+    private $old_plugin_dir;
 
     public function __construct($plugin_file) {
         $this->plugin_file = $plugin_file;
@@ -41,6 +42,10 @@ class JetEmail_WP_Updater {
 
         // Force check updates on init
         add_action('init', array($this, 'force_update_check'));
+
+        // Add hooks for maintaining the correct directory name during updates
+        add_filter('upgrader_pre_install', array($this, 'upgrader_pre_install'), 10, 2);
+        add_filter('upgrader_post_install', array($this, 'upgrader_post_install'), 10, 3);
     }
 
     public function force_update_check() {
@@ -356,5 +361,43 @@ class JetEmail_WP_Updater {
         } else {
             return __('Auto-updates disabled', 'jetemail-wordpress');
         }
+    }
+
+    public function upgrader_pre_install($true, $args) {
+        // Get the plugin directory name
+        $plugin_dir = dirname($this->plugin_basename);
+        
+        // Save the old directory name
+        $this->old_plugin_dir = WP_PLUGIN_DIR . '/' . $plugin_dir;
+        
+        return $true;
+    }
+
+    public function upgrader_post_install($true, $hook_extra, $result) {
+        global $wp_filesystem;
+        
+        // Get the expected plugin directory name
+        $plugin_dir = dirname($this->plugin_basename);
+        $proper_destination = WP_PLUGIN_DIR . '/' . $plugin_dir;
+        
+        // Check if the plugin directory exists
+        if (!$wp_filesystem->exists($proper_destination)) {
+            // Find the extracted directory (it might have a different name)
+            $extracted_dir = '';
+            foreach (glob(WP_PLUGIN_DIR . '/jetemail*') as $dir) {
+                if ($dir !== $proper_destination && is_dir($dir)) {
+                    $extracted_dir = $dir;
+                    break;
+                }
+            }
+            
+            // If we found the extracted directory and it's different from what we want
+            if (!empty($extracted_dir) && $extracted_dir !== $proper_destination) {
+                // Move it to the correct location
+                $wp_filesystem->move($extracted_dir, $proper_destination);
+            }
+        }
+        
+        return $true;
     }
 } 
