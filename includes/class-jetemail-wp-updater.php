@@ -9,16 +9,24 @@ class JetEmail_WP_Updater {
     private $github_raw_url = 'https://raw.githubusercontent.com/jetemail/jetemail-wordpress';
     private $plugin_slug;
     private $plugin_file;
+    private $plugin_basename;
     private $version;
     private $cache_key;
     private $cache_allowed;
 
     public function __construct($plugin_file) {
         $this->plugin_file = $plugin_file;
+        $this->plugin_basename = plugin_basename($plugin_file);
         $this->plugin_slug = basename(dirname(dirname($plugin_file)));
         $this->version = JETEMAIL_WP_VERSION;
         $this->cache_key = 'jetemail_wp_updater';
         $this->cache_allowed = true;
+
+        // Debug current version and paths
+        error_log('JetEmail current version: ' . $this->version);
+        error_log('JetEmail plugin file: ' . $this->plugin_file);
+        error_log('JetEmail plugin basename: ' . $this->plugin_basename);
+        error_log('JetEmail plugin slug: ' . $this->plugin_slug);
 
         add_filter('pre_set_site_transient_update_plugins', array($this, 'check_update'));
         add_filter('plugins_api', array($this, 'plugin_info'), 10, 3);
@@ -30,6 +38,15 @@ class JetEmail_WP_Updater {
         
         // Add auto-update settings
         add_action('admin_init', array($this, 'register_auto_update_setting'));
+
+        // Force check updates on init
+        add_action('init', array($this, 'force_update_check'));
+    }
+
+    public function force_update_check() {
+        // Delete the cached update data
+        delete_site_transient('update_plugins');
+        wp_update_plugins();
     }
 
     public function check_update($transient) {
@@ -37,21 +54,47 @@ class JetEmail_WP_Updater {
             return $transient;
         }
 
+        // Debug transient data
+        error_log('JetEmail checking for updates. Current transient: ' . print_r($transient, true));
+
         $remote_version = $this->get_remote_version();
+        error_log('JetEmail remote version: ' . ($remote_version ? $remote_version : 'not found'));
+
         if ($remote_version && version_compare($this->version, $remote_version, '<')) {
-            $plugin_data = $this->get_remote_info();
-            if ($plugin_data) {
+            error_log('JetEmail new version available: ' . $remote_version);
+            
+            $release_info = $this->get_latest_release();
+            if ($release_info) {
                 $obj = new stdClass();
                 $obj->slug = $this->plugin_slug;
+                $obj->plugin = $this->plugin_basename;
                 $obj->new_version = $remote_version;
-                $obj->url = $plugin_data->html_url;
-                $obj->package = $plugin_data->zipball_url;
+                $obj->url = $release_info->html_url;
+                $obj->package = $release_info->zipball_url;
                 $obj->tested = $this->get_tested_wp_version();
                 $obj->requires = '5.0';
                 $obj->requires_php = '7.2';
+                $obj->icons = array(
+                    '1x' => 'https://ps.w.org/jetemail-wordpress/assets/icon-128x128.png',
+                    '2x' => 'https://ps.w.org/jetemail-wordpress/assets/icon-256x256.png'
+                );
 
-                $transient->response[$this->plugin_file] = $obj;
+                error_log('JetEmail update object: ' . print_r($obj, true));
+
+                $transient->response[$this->plugin_basename] = $obj;
             }
+        } else {
+            // Add the plugin to the no_update list to show it's up to date
+            $obj = new stdClass();
+            $obj->slug = $this->plugin_slug;
+            $obj->plugin = $this->plugin_basename;
+            $obj->new_version = $this->version;
+            $obj->url = $this->github_api_url;
+            $obj->package = '';
+            $obj->tested = $this->get_tested_wp_version();
+            $transient->no_update[$this->plugin_basename] = $obj;
+            
+            error_log('JetEmail no update needed. Current: ' . $this->version . ', Remote: ' . $remote_version);
         }
 
         return $transient;
@@ -110,7 +153,15 @@ class JetEmail_WP_Updater {
 
     private function get_latest_release() {
         $releases_url = $this->github_api_url . '/releases/latest';
-        return $this->github_api_request($releases_url);
+        $response = $this->github_api_request($releases_url);
+        
+        if ($response) {
+            error_log('JetEmail GitHub release info: ' . print_r($response, true));
+        } else {
+            error_log('JetEmail failed to get GitHub release info');
+        }
+        
+        return $response;
     }
 
     private function get_remote_info() {
@@ -154,10 +205,8 @@ class JetEmail_WP_Updater {
     }
 
     private function github_api_request($url) {
-        $cached_data = get_transient($this->cache_key . md5($url));
-        if ($cached_data !== false && $this->cache_allowed) {
-            return $cached_data;
-        }
+        // Clear any existing cache
+        delete_transient($this->cache_key . md5($url));
 
         $response = wp_remote_get($url, array(
             'headers' => array(
@@ -167,7 +216,15 @@ class JetEmail_WP_Updater {
             'timeout' => 10
         ));
 
-        if (is_wp_error($response) || 200 !== wp_remote_retrieve_response_code($response)) {
+        if (is_wp_error($response)) {
+            error_log('JetEmail GitHub API Error: ' . $response->get_error_message());
+            return false;
+        }
+
+        $response_code = wp_remote_retrieve_response_code($response);
+        if ($response_code !== 200) {
+            error_log('JetEmail GitHub API Error: Unexpected response code ' . $response_code);
+            error_log('JetEmail GitHub API Response: ' . wp_remote_retrieve_body($response));
             return false;
         }
 
@@ -289,7 +346,7 @@ class JetEmail_WP_Updater {
      * Customize the auto-update column text
      */
     public function auto_update_setting_html($html, $plugin_file) {
-        if ($plugin_file !== plugin_basename($this->plugin_file)) {
+        if ($plugin_file !== $this->plugin_basename) {
             return $html;
         }
 
