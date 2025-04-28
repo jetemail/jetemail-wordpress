@@ -3,7 +3,7 @@
  * Plugin Name: JetEmail for WordPress
  * Plugin URI: https://jetemail.com
  * Description: Send emails through JetEmail's transactional email service
- * Version: 1.0.0
+ * Version: 1.0.1
  * Author: JetEmail
  * Author URI: https://jetemail.com
  * License: GPL v2 or later
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('JETEMAIL_WP_VERSION', '1.0.0');
+define('JETEMAIL_WP_VERSION', '1.0.1');
 define('JETEMAIL_WP_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('JETEMAIL_WP_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('JETEMAIL_WP_PLUGIN_FILE', __FILE__);
