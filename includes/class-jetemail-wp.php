@@ -7,6 +7,8 @@ if (!defined('ABSPATH')) {
 class JetEmail_WP {
     private $api_key;
     private $api_endpoint = 'https://api.jetemail.com/email';
+    private $sender_email;
+    private $sender_name;
 
     public function init() {
         // Load plugin text domain
@@ -19,8 +21,14 @@ class JetEmail_WP {
         // Override WordPress mail function
         add_action('phpmailer_init', array($this, 'override_wordpress_mail'), 10, 1);
 
-        // Get API key
+        // Get settings
         $this->api_key = get_option('jetemail_wp_api_key');
+        $this->sender_email = get_option('jetemail_wp_sender_email', get_option('admin_email'));
+        $this->sender_name = get_option('jetemail_wp_sender_name', get_bloginfo('name'));
+
+        // Add filter for wp_mail_from and wp_mail_from_name
+        add_filter('wp_mail_from', array($this, 'set_mail_from'));
+        add_filter('wp_mail_from_name', array($this, 'set_mail_from_name'));
     }
 
     public function load_textdomain() {
@@ -38,8 +46,17 @@ class JetEmail_WP {
     }
 
     public function register_settings() {
+        // API Key setting
         register_setting('jetemail_wp_settings', 'jetemail_wp_api_key');
 
+        // Sender Email settings
+        register_setting('jetemail_wp_settings', 'jetemail_wp_sender_email', array(
+            'type' => 'string',
+            'sanitize_callback' => array($this, 'sanitize_email_field')
+        ));
+        register_setting('jetemail_wp_settings', 'jetemail_wp_sender_name');
+
+        // Settings section
         add_settings_section(
             'jetemail_wp_settings_section',
             __('API Settings', 'jetemail-wordpress'),
@@ -47,6 +64,7 @@ class JetEmail_WP {
             'jetemail-settings'
         );
 
+        // API Key field
         add_settings_field(
             'jetemail_wp_api_key',
             __('API Key', 'jetemail-wordpress'),
@@ -54,10 +72,32 @@ class JetEmail_WP {
             'jetemail-settings',
             'jetemail_wp_settings_section'
         );
+
+        // Sender Email field
+        add_settings_field(
+            'jetemail_wp_sender_email',
+            __('Default Sender Email', 'jetemail-wordpress'),
+            array($this, 'sender_email_field_callback'),
+            'jetemail-settings',
+            'jetemail_wp_settings_section'
+        );
+
+        // Sender Name field
+        add_settings_field(
+            'jetemail_wp_sender_name',
+            __('Default Sender Name', 'jetemail-wordpress'),
+            array($this, 'sender_name_field_callback'),
+            'jetemail-settings',
+            'jetemail_wp_settings_section'
+        );
     }
 
     public function settings_section_callback() {
         echo '<p>' . __('Configure your JetEmail settings below:', 'jetemail-wordpress') . '</p>';
+        
+        // Add a note about sender email
+        echo '<p><strong>' . __('Default Sender:', 'jetemail-wordpress') . '</strong> ';
+        echo __('Set the default "From" email address and name for all outgoing emails. If left empty, the admin email and site name will be used.', 'jetemail-wordpress') . '</p>';
         
         // Add a note about auto-updates
         echo '<p><strong>' . __('Auto-Updates:', 'jetemail-wordpress') . '</strong> ';
@@ -67,6 +107,47 @@ class JetEmail_WP {
     public function api_key_field_callback() {
         $api_key = get_option('jetemail_wp_api_key');
         echo '<input type="password" id="jetemail_wp_api_key" name="jetemail_wp_api_key" value="' . esc_attr($api_key) . '" class="regular-text">';
+    }
+
+    public function sender_email_field_callback() {
+        $sender_email = get_option('jetemail_wp_sender_email', get_option('admin_email'));
+        echo '<input type="email" id="jetemail_wp_sender_email" name="jetemail_wp_sender_email" value="' . esc_attr($sender_email) . '" class="regular-text">';
+        echo '<p class="description">' . __('The email address that emails will be sent from. Must be a verified sender in your JetEmail account.', 'jetemail-wordpress') . '</p>';
+    }
+
+    public function sender_name_field_callback() {
+        $sender_name = get_option('jetemail_wp_sender_name', get_bloginfo('name'));
+        echo '<input type="text" id="jetemail_wp_sender_name" name="jetemail_wp_sender_name" value="' . esc_attr($sender_name) . '" class="regular-text">';
+        echo '<p class="description">' . __('The name that will appear as the sender of emails.', 'jetemail-wordpress') . '</p>';
+    }
+
+    public function sanitize_email_field($email) {
+        $email = sanitize_email($email);
+        if (!is_email($email)) {
+            add_settings_error(
+                'jetemail_wp_sender_email',
+                'invalid_email',
+                __('Please enter a valid email address.', 'jetemail-wordpress')
+            );
+            return get_option('jetemail_wp_sender_email', get_option('admin_email'));
+        }
+        return $email;
+    }
+
+    public function set_mail_from($email) {
+        // Only override if we have a custom sender email set
+        if (!empty($this->sender_email)) {
+            return $this->sender_email;
+        }
+        return $email;
+    }
+
+    public function set_mail_from_name($name) {
+        // Only override if we have a custom sender name set
+        if (!empty($this->sender_name)) {
+            return $this->sender_name;
+        }
+        return $name;
     }
 
     public function render_settings_page() {
