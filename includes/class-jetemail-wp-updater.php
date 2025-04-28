@@ -130,13 +130,10 @@ class JetEmail_WP_Updater {
             return $res;
         }
 
-        $remote_info = $this->get_remote_info();
-        if (!$remote_info) {
+        $release_info = $this->get_latest_release();
+        if (!$release_info) {
             return $res;
         }
-
-        $readme = $this->get_readme_info();
-        $release_info = $this->get_latest_release();
 
         $res = new stdClass();
         $res->name = 'JetEmail for WordPress';
@@ -150,22 +147,73 @@ class JetEmail_WP_Updater {
         $res->download_link = $this->get_release_download_url($release_info);
         $res->trunk = $this->get_release_download_url($release_info);
         $res->last_updated = isset($release_info->published_at) ? date('Y-m-d H:i:s', strtotime($release_info->published_at)) : '';
+        $res->banners = array(
+            'high' => 'https://jetemail.com/wp-content/uploads/2024/04/jetemail-banner-1544x500.jpg',
+            'low' => 'https://jetemail.com/wp-content/uploads/2024/04/jetemail-banner-772x250.jpg'
+        );
+        $res->icons = array(
+            '1x' => 'https://jetemail.com/wp-content/uploads/2024/04/jetemail-icon-128x128.png',
+            '2x' => 'https://jetemail.com/wp-content/uploads/2024/04/jetemail-icon-256x256.png'
+        );
         
-        // Parse readme sections if available
-        if ($readme) {
-            $res->sections = array(
-                'description' => $readme->description ?? '',
-                'installation' => $readme->installation ?? '',
-                'changelog' => $this->get_changelog()
-            );
-        } else {
-            $res->sections = array(
-                'description' => $remote_info->description,
-                'changelog' => $this->get_changelog()
-            );
+        // Get the description from the release body
+        $description = $release_info->body;
+        if (empty($description)) {
+            $description = 'JetEmail is a WordPress plugin that allows you to send emails through JetEmail\'s transactional email service. ' .
+                         'It provides a simple way to configure your email settings and ensures reliable email delivery for your WordPress site.';
         }
 
+        // Format the changelog
+        $changelog = $this->format_markdown($release_info->body);
+        if (empty($changelog)) {
+            $changelog = 'Visit the <a href="' . $release_info->html_url . '">release page</a> for the latest updates.';
+        }
+
+        // Set up the sections
+        $res->sections = array(
+            'description' => $this->format_markdown($description),
+            'installation' => $this->get_installation_instructions(),
+            'changelog' => $changelog,
+            'faq' => $this->get_faq()
+        );
+
         return $res;
+    }
+
+    private function get_installation_instructions() {
+        return '<h4>Automatic Installation</h4>' .
+               '<ol>' .
+               '<li>Log in to your WordPress admin panel</li>' .
+               '<li>Go to Plugins > Add New</li>' .
+               '<li>Search for "JetEmail"</li>' .
+               '<li>Click "Install Now" and then "Activate"</li>' .
+               '</ol>' .
+               '<h4>Manual Installation</h4>' .
+               '<ol>' .
+               '<li>Download the plugin ZIP file</li>' .
+               '<li>Log in to your WordPress admin panel</li>' .
+               '<li>Go to Plugins > Add New > Upload Plugin</li>' .
+               '<li>Click "Choose File" and select the downloaded ZIP file</li>' .
+               '<li>Click "Install Now" and then "Activate Plugin"</li>' .
+               '</ol>' .
+               '<h4>Configuration</h4>' .
+               '<ol>' .
+               '<li>Go to Settings > JetEmail</li>' .
+               '<li>Enter your JetEmail API key</li>' .
+               '<li>Optionally configure your default sender email and name</li>' .
+               '<li>Save your settings</li>' .
+               '</ol>';
+    }
+
+    private function get_faq() {
+        return '<h4>How do I get a JetEmail API key?</h4>' .
+               '<p>You can sign up for a JetEmail account at <a href="https://jetemail.com">jetemail.com</a>. Once logged in, you can generate an API key from your account settings.</p>' .
+               '<h4>Will this plugin work with my existing WordPress emails?</h4>' .
+               '<p>Yes! JetEmail automatically handles all emails sent through WordPress, including password resets, notifications, and contact form submissions.</p>' .
+               '<h4>Can I customize the sender name and email?</h4>' .
+               '<p>Yes, you can set a default sender name and email address in the plugin settings. If left blank, the plugin will use your WordPress defaults.</p>' .
+               '<h4>Do you offer support?</h4>' .
+               '<p>Yes, we provide support through our <a href="https://github.com/jetemail/jetemail-wordpress/issues">GitHub issues page</a>.</p>';
     }
 
     private function get_remote_version() {
